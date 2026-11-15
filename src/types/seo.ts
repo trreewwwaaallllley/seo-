@@ -129,6 +129,8 @@ export interface AdminProfileResponse {
     geminiConfigured: boolean;
     googleAdsDeveloperTokenConfigured: boolean;
     googleOAuthClientConfigured?: boolean;
+    activeOAuthClientId?: string;
+    firebaseProjectId?: string;
     appUrl: string;
   };
 }

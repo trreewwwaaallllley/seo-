@@ -1,9 +1,75 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { doc, getDocFromServer, getFirestore } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+export const firestore = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const ACTIVE_OAUTH_CLIENT_ID = firebaseConfig.oAuthClientId;
+export const ACTIVE_PROJECT_ID = firebaseConfig.projectId;
+
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: Array<{
+      providerId?: string | null;
+      email?: string | null;
+    }>;
+  };
+}
+
+export function handleFirestoreError(
+  error: unknown,
+  operationType: OperationType,
+  path: string | null
+) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo:
+        auth.currentUser?.providerData?.map((provider) => ({
+          providerId: provider.providerId,
+          email: provider.email,
+        })) || [],
+    },
+    operationType,
+    path,
+  };
+  console.error('Firestore Error:', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+export async function testFirestoreConnection() {
+  try {
+    await getDocFromServer(doc(firestore, 'test', 'connection'));
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.error('Please check your Firebase configuration.');
+    }
+  }
+}
 
 export const GOOGLE_SERVICE_SCOPES = {
   searchConsoleReadonly: 'https://www.googleapis.com/auth/webmasters.readonly',
@@ -12,9 +78,6 @@ export const GOOGLE_SERVICE_SCOPES = {
   analytics: 'https://www.googleapis.com/auth/analytics.readonly',
   ads: 'https://www.googleapis.com/auth/adwords',
 } as const;
-
-export const baseGoogleProvider = new GoogleAuthProvider();
-baseGoogleProvider.setCustomParameters({ prompt: 'select_account' });
 
 let inMemoryGoogleAccessToken: string | null = null;
 let inMemoryGoogleExpiresAt = 0;
@@ -39,13 +102,13 @@ export function clearInMemoryGoogleToken() {
 
 /**
  * Normal Google Sign-In strictly for SEO platform authentication (openid, email, profile).
- * Does NOT assume Blogger or Search Console API permissions are granted.
+ * Uses the active project OAuth client ID from firebase-applet-config.json.
  */
 export async function signInAsAdmin() {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
   const result = await signInWithPopup(auth, provider);
-  const idToken = await result.user.getIdToken();
+  const idToken = await result.user.getIdToken(true);
   return {
     user: result.user,
     idToken,
@@ -53,8 +116,9 @@ export async function signInAsAdmin() {
 }
 
 /**
- * Separate Google API Authorization popup (used when backend GOOGLE_CLIENT_ID/SECRET offline flow
- * is not yet configured). Requests explicit service scopes and returns temporary access token.
+ * Separate Google API Authorization popup powered by the active Developer OAuth Client ID
+ * (531048520662-cjfc2kbg9ukioh76kbb18dvi9pr76v0e.apps.googleusercontent.com).
+ * Requests explicit service scopes and caches the verified token in memory only.
  */
 export async function authorizeGoogleApisViaPopup(requestedScopes: string[]) {
   const provider = new GoogleAuthProvider();

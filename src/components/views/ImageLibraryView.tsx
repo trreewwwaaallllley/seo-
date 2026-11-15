@@ -220,10 +220,10 @@ export const ImageLibraryView: React.FC = () => {
           <div className="space-y-3">
             <h2 className="font-display text-xl font-bold text-[#1D221F] flex items-center gap-2">
               <ImagePlus className="w-5 h-5 text-[#B68D40]" />
-              <span>AI Generic Inspiration Image (Optional)</span>
+              <span>AI Generic Inspiration Image (Paid Model · Optional)</span>
             </h2>
             <p className="text-[#5C635E] leading-relaxed">
-              Use only for generic interior design inspiration—never alter actual TreeWalley product designs or misrepresent generic inspiration as a specific TreeWalley SKU.
+              Uploading your own TreeWalley product photos for WebP conversion &amp; SEO naming on the left is 100% free. AI image generation (<span className="font-mono-tabular">gemini-3.1-flash-lite-image</span>) is optional and requires a billing-enabled Gemini API key with active credits. Never misrepresent generic inspiration as a specific TreeWalley SKU.
             </p>
             <div>
               <label className="block font-medium text-[#1D221F] mb-1">Scene Description</label>

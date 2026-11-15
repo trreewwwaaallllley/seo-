@@ -91,6 +91,7 @@ export const BlogWriterView: React.FC<BlogWriterViewProps> = ({
   const [activeArticle, setActiveArticle] = useState<Article | null>(null);
   const [viewMode, setViewMode] = useState<'preview' | 'html'>('preview');
   const [generating, setGenerating] = useState(false);
+  const [creatingDraft, setCreatingDraft] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -177,6 +178,42 @@ export const BlogWriterView: React.FC<BlogWriterViewProps> = ({
       setError(err.message);
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleCreateManualDraft = async () => {
+    setCreatingDraft(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await apiFetch('/api/articles/draft', {
+        method: 'POST',
+        body: JSON.stringify({
+          topic,
+          primaryKeyword,
+          secondaryKeywords,
+          targetCountry,
+          targetAudience,
+          languageCode,
+          regionalVariation: selectedLang.region,
+          wordCount,
+          mode,
+          writingStyle,
+          blogCategory,
+          productLinks,
+          selectedMediaIds,
+          internalLinks: selectedInternalUrls,
+        }),
+      });
+      setActiveArticle(res.article);
+      await loadWorkspace();
+      setNotice(
+        `Created structured free draft "${res.article.title}" with selected WebP images & verified links (SEO Score: ${res.article.seoScore}/100). Edit below and publish to Blogger.`
+      );
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setCreatingDraft(false);
     }
   };
 
@@ -483,14 +520,24 @@ export const BlogWriterView: React.FC<BlogWriterViewProps> = ({
             </div>
           )}
 
-          <button
-            type="submit"
-            disabled={generating}
-            className="w-full py-2.5 px-4 rounded-md bg-[#1B4332] text-[#FAF8F4] font-medium hover:bg-[#143325] disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>{generating ? 'Composing Multilingual SEO Article...' : 'Generate SEO Article'}</span>
-          </button>
+          <div className="space-y-2">
+            <button
+              type="submit"
+              disabled={generating || creatingDraft}
+              className="w-full py-2.5 px-4 rounded-md bg-[#1B4332] text-[#FAF8F4] font-medium hover:bg-[#143325] disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>{generating ? 'Composing Multilingual SEO Article...' : 'Generate SEO Article'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleCreateManualDraft}
+              disabled={generating || creatingDraft}
+              className="w-full py-2 px-4 rounded-md border border-[#E6E0D6] text-[#1D221F] font-medium hover:bg-[#FAF8F4] disabled:opacity-50 cursor-pointer"
+            >
+              {creatingDraft ? 'Creating Structured Draft...' : 'Create Structured Draft (Free · No AI Quota)'}
+            </button>
+          </div>
         </form>
 
         {/* Editorial Workspace & Quality Control */}

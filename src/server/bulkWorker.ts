@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '../db/index.ts';
 import { articles, bulkJobs, externalReferences, internalLinks, mediaAssets } from '../db/schema.ts';
 import { generateSeoArticle } from './gemini.ts';
@@ -12,14 +12,18 @@ export async function startBulkJobRunner(jobId: number, userUid: string) {
   activeRunners.add(jobId);
 
   try {
-    const [job] = await db.select().from(bulkJobs).where(eq(bulkJobs.id, jobId)).limit(1);
+    const [job] = await db
+      .select()
+      .from(bulkJobs)
+      .where(and(eq(bulkJobs.id, jobId), eq(bulkJobs.userUid, userUid)))
+      .limit(1);
     if (!job || job.status === 'completed') return;
 
     const startedAt = job.startedAt || new Date();
     await db
       .update(bulkJobs)
       .set({ status: 'running', startedAt })
-      .where(eq(bulkJobs.id, jobId));
+      .where(and(eq(bulkJobs.id, jobId), eq(bulkJobs.userUid, userUid)));
 
     const langObj = LANGUAGES_350.find((l) => l.code === job.languageCode);
     const reliabilityFlag = langObj?.reliability || 'Good';
@@ -58,7 +62,7 @@ export async function startBulkJobRunner(jobId: number, userUid: string) {
         const [latestJob] = await db
           .select({ status: bulkJobs.status })
           .from(bulkJobs)
-          .where(eq(bulkJobs.id, jobId))
+          .where(and(eq(bulkJobs.id, jobId), eq(bulkJobs.userUid, userUid)))
           .limit(1);
         if (!latestJob || latestJob.status === 'paused') {
           return;
@@ -229,7 +233,7 @@ export async function startBulkJobRunner(jobId: number, userUid: string) {
             failedCount: failed,
             throughputPerMin: measuredThroughput,
           })
-          .where(eq(bulkJobs.id, jobId));
+          .where(and(eq(bulkJobs.id, jobId), eq(bulkJobs.userUid, userUid)));
       }
     }
 
@@ -238,7 +242,7 @@ export async function startBulkJobRunner(jobId: number, userUid: string) {
     const [finalCheck] = await db
       .select({ status: bulkJobs.status })
       .from(bulkJobs)
-      .where(eq(bulkJobs.id, jobId))
+      .where(and(eq(bulkJobs.id, jobId), eq(bulkJobs.userUid, userUid)))
       .limit(1);
 
     if (finalCheck && finalCheck.status !== 'paused') {
@@ -253,13 +257,13 @@ export async function startBulkJobRunner(jobId: number, userUid: string) {
           throughputPerMin: Number((completed / elapsedMinutes).toFixed(2)),
           topicsJson: topics,
         })
-        .where(eq(bulkJobs.id, jobId));
+        .where(and(eq(bulkJobs.id, jobId), eq(bulkJobs.userUid, userUid)));
     }
   } catch (err: any) {
     await db
       .update(bulkJobs)
       .set({ status: 'failed', errorSummary: err?.message || 'Worker crashed unexpectedly' })
-      .where(eq(bulkJobs.id, jobId));
+      .where(and(eq(bulkJobs.id, jobId), eq(bulkJobs.userUid, userUid)));
   } finally {
     activeRunners.delete(jobId);
   }

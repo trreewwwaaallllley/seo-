@@ -1,0 +1,315 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Single authorized administrator account authenticated via Firebase Auth.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer" },
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "maxLength": 320 },
+        "displayName": { "type": "string", "maxLength": 200 },
+        "photoUrl": { "type": "string", "maxLength": 1024 },
+        "role": { "type": "string", "enum": ["admin"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "lastLoginAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "AdminSettings": {
+      "title": "AdminSettings",
+      "description": "Administrator domain, Search Console, Blogger, and SEO thresholds.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer" },
+        "userUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "allowlistedEmail": { "type": "string", "format": "email", "maxLength": 320 },
+        "targetDomain": { "type": "string", "maxLength": 512 },
+        "amazonStoreUrl": { "type": "string", "maxLength": 512 },
+        "sitemapUrl": { "type": "string", "maxLength": 512 },
+        "searchConsoleSiteUrl": { "type": "string", "maxLength": 512 },
+        "defaultBloggerId": { "type": "string", "maxLength": 128 },
+        "defaultBloggerName": { "type": "string", "maxLength": 256 },
+        "ga4PropertyId": { "type": "string", "maxLength": 128 },
+        "googleAdsCustomerId": { "type": "string", "maxLength": 128 },
+        "trendsApiApproved": { "type": "boolean" },
+        "minSeoScoreThreshold": { "type": "integer" },
+        "maxDailyPublishLimit": { "type": "integer" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userUid", "allowlistedEmail", "targetDomain"]
+    },
+    "OAuthConnection": {
+      "title": "OAuthConnection",
+      "description": "Encrypted server-side Google OAuth connection state and API diagnostics.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer" },
+        "userUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "provider": { "type": "string", "maxLength": 64 },
+        "oauthMode": { "type": "string", "maxLength": 64 },
+        "connectedEmail": { "type": "string", "maxLength": 320 },
+        "status": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userUid", "provider", "status"]
+    },
+    "Keyword": {
+      "title": "Keyword",
+      "description": "Tracked keyword research item with separated Google Ads, Trends, and Search Console metrics.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer" },
+        "userUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "keyword": { "type": "string", "maxLength": 500 },
+        "country": { "type": "string", "maxLength": 100 },
+        "language": { "type": "string", "maxLength": 100 },
+        "dataSourceLabel": { "type": "string", "maxLength": 128 },
+        "saved": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userUid", "keyword"]
+    },
+    "TrendSnapshot": {
+      "title": "TrendSnapshot",
+      "description": "Imported or analyzed furniture trend snapshot.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer" },
+        "userUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "category": { "type": "string", "maxLength": 200 },
+        "keyword": { "type": "string", "maxLength": 500 },
+        "sourceType": { "type": "string", "maxLength": 100 },
+        "importedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userUid", "category", "keyword"]
+    },
+    "GscSnapshot": {
+      "title": "GscSnapshot",
+      "description": "Google Search Console performance snapshot.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer" },
+        "userUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "siteUrl": { "type": "string", "maxLength": 512 },
+        "dateRangeStart": { "type": "string", "maxLength": 32 },
+        "dateRangeEnd": { "type": "string", "maxLength": 32 },
+        "totalClicks": { "type": "integer" },
+        "totalImpressions": { "type": "integer" },
+        "syncedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userUid", "siteUrl", "dateRangeStart", "dateRangeEnd"]
+    },
+    "RankHistory": {
+      "title": "RankHistory",
+      "description": "Historical Search Console keyword position tracking.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer" },
+        "userUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "keyword": { "type": "string", "maxLength": 500 },
+        "landingPage": { "type": "string", "maxLength": 1024 },
+        "date": { "type": "string", "maxLength": 32 },
+        "avgPosition": { "type": "number" },
+        "bucket": { "type": "string", "maxLength": 32 }
+      },
+      "required": ["userUid", "keyword", "landingPage", "date", "bucket"]
+    },
+    "IndexInspection": {
+      "title": "IndexInspection",
+      "description": "Google URL Inspection API coverage verdict record.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer" },
+        "userUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "url": { "type": "string", "maxLength": 1024 },
+        "verdict": { "type": "string", "maxLength": 100 },
+        "coverageState": { "type": "string", "maxLength": 200 },
+        "inspectedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userUid", "url", "verdict", "coverageState"]
+    },
+    "InternalLink": {
+      "title": "InternalLink",
+      "description": "Discovered or manual TreeWalley internal product/brand link.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer" },
+        "userUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "url": { "type": "string", "maxLength": 1024 },
+        "title": { "type": "string", "maxLength": 500 },
+        "pageType": { "type": "string", "maxLength": 64 },
+        "category": { "type": "string", "maxLength": 128 },
+        "source": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["userUid", "url", "title"]
+    },
+    "ExternalReference": {
+      "title": "ExternalReference",
+      "description": "Approved authoritative external reference URL.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer" },
+        "userUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "url": { "type": "string", "maxLength": 1024 },
+        "title": { "type": "string", "maxLength": 500 },
+        "publisher": { "type": "string", "maxLength": 256 },
+        "approved": { "type": "boolean" }
+      },
+      "required": ["userUid", "url", "title", "publisher"]
+    },
+    "MediaAsset": {
+      "title": "MediaAsset",
+      "description": "Furniture image asset with SEO metadata and WebP URL.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer" },
+        "userUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "filename": { "type": "string", "maxLength": 512 },
+        "seoFilename": { "type": "string", "maxLength": 512 },
+        "publicUrl": { "type": "string", "maxLength": 1024 },
+        "altText": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["userUid", "filename", "publicUrl", "altText"]
+    },
+    "Article": {
+      "title": "Article",
+      "description": "Multilingual SEO article draft, scheduled post, or published Blogger article.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer" },
+        "userUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "maxLength": 500 },
+        "seoTitle": { "type": "string", "maxLength": 500 },
+        "slug": { "type": "string", "maxLength": 300 },
+        "metaDescription": { "type": "string", "maxLength": 1000 },
+        "primaryKeyword": { "type": "string", "maxLength": 300 },
+        "contentHtml": { "type": "string" },
+        "status": { "type": "string", "enum": ["draft", "scheduled", "published", "failed"] },
+        "seoScore": { "type": "integer" }
+      },
+      "required": ["userUid", "title", "slug", "primaryKeyword", "status"]
+    },
+    "BulkJob": {
+      "title": "BulkJob",
+      "description": "Batch AI article generation job.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer" },
+        "userUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "batchName": { "type": "string", "maxLength": 300 },
+        "requestedCount": { "type": "integer" },
+        "status": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["userUid", "batchName", "requestedCount", "status"]
+    },
+    "PublishingLog": {
+      "title": "PublishingLog",
+      "description": "Blogger publishing audit trail record.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer" },
+        "userUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "articleTitle": { "type": "string", "maxLength": 500 },
+        "bloggerBlogId": { "type": "string", "maxLength": 128 },
+        "action": { "type": "string", "maxLength": 64 },
+        "status": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["userUid", "articleTitle", "bloggerBlogId", "action", "status"]
+    },
+    "AuditReport": {
+      "title": "AuditReport",
+      "description": "Monthly SEO audit report snapshot.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer" },
+        "userUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "reportMonth": { "type": "string", "maxLength": 32 },
+        "executiveSummary": { "type": "string" }
+      },
+      "required": ["userUid", "reportMonth", "executiveSummary"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "Administrator activity audit log.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer" },
+        "userUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "actorEmail": { "type": "string", "maxLength": 320 },
+        "action": { "type": "string", "maxLength": 200 },
+        "module": { "type": "string", "maxLength": 100 },
+        "details": { "type": "string", "maxLength": 4000 },
+        "status": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["userUid", "actorEmail", "action", "module"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Single authorized administrator profile."
+    },
+    "/admin_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/AdminSettings" },
+      "description": "Administrator domain, GSC, and Blogger defaults."
+    },
+    "/oauth_connections/{connId}": {
+      "schema": { "$ref": "#/entities/OAuthConnection" },
+      "description": "Encrypted Google OAuth connection tokens and diagnostics."
+    },
+    "/keywords/{keywordId}": {
+      "schema": { "$ref": "#/entities/Keyword" },
+      "description": "Keyword research entries."
+    },
+    "/trend_snapshots/{snapshotId}": {
+      "schema": { "$ref": "#/entities/TrendSnapshot" },
+      "description": "Google Trends CSV imports and topic insights."
+    },
+    "/gsc_snapshots/{snapshotId}": {
+      "schema": { "$ref": "#/entities/GscSnapshot" },
+      "description": "Search Console analytics snapshots."
+    },
+    "/rank_history/{rankId}": {
+      "schema": { "$ref": "#/entities/RankHistory" },
+      "description": "Keyword rank history rows."
+    },
+    "/index_inspections/{inspectionId}": {
+      "schema": { "$ref": "#/entities/IndexInspection" },
+      "description": "URL Inspection API check results."
+    },
+    "/internal_links/{linkId}": {
+      "schema": { "$ref": "#/entities/InternalLink" },
+      "description": "TreeWalley internal link catalog."
+    },
+    "/external_references/{refId}": {
+      "schema": { "$ref": "#/entities/ExternalReference" },
+      "description": "Authoritative external reference URLs."
+    },
+    "/media_assets/{assetId}": {
+      "schema": { "$ref": "#/entities/MediaAsset" },
+      "description": "Uploaded and verified product media assets."
+    },
+    "/articles/{articleId}": {
+      "schema": { "$ref": "#/entities/Article" },
+      "description": "Generated and published multilingual SEO articles."
+    },
+    "/bulk_jobs/{jobId}": {
+      "schema": { "$ref": "#/entities/BulkJob" },
+      "description": "Bulk article generation jobs."
+    },
+    "/publishing_logs/{logId}": {
+      "schema": { "$ref": "#/entities/PublishingLog" },
+      "description": "Blogger publish/draft history logs."
+    },
+    "/audit_reports/{reportId}": {
+      "schema": { "$ref": "#/entities/AuditReport" },
+      "description": "Monthly SEO audit reports."
+    },
+    "/activity_logs/{logId}": {
+      "schema": { "$ref": "#/entities/ActivityLog" },
+      "description": "Administrator activity audit log."
+    }
+  }
+}

@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from 'express';
 import { DecodedIdToken } from 'firebase-admin/auth';
 import { adminAuth } from '../lib/firebase-admin.ts';
 import { getOrCreateAdminUser } from '../db/users.ts';
+import { runWithDbAuth } from '../db/index.ts';
 
 export interface AuthRequest extends Request {
   user?: DecodedIdToken;
@@ -24,7 +25,7 @@ export const requireAdminAuth = async (
     decodedToken = await adminAuth.verifyIdToken(token);
   } catch (error: any) {
     const msg = String(error?.message || '');
-    if (error?.code === 'auth/argument-error' && msg.includes('incorrect "aud"')) {
+    if (msg.includes('incorrect "aud"') || msg.includes('incorrect "iss"')) {
       console.warn('Rejected stale Firebase ID token from previous project; client will refresh.');
       return res.status(401).json({
         error: 'Session belongs to a previous Firebase project. Refreshing administrator sign-in...',
@@ -32,34 +33,39 @@ export const requireAdminAuth = async (
       });
     }
     console.warn('Firebase ID token verification failed:', error?.code || msg);
-    return res.status(401).json({ error: 'Unauthorized: Invalid or expired session token.' });
+    return res.status(401).json({
+      error: 'Unauthorized: Invalid or expired session token.',
+      code: typeof error?.code === 'string' ? error.code : 'INVALID_SESSION_TOKEN',
+    });
   }
 
   if (!decodedToken.email) {
     return res.status(403).json({ error: 'Forbidden: Google account email is required.' });
   }
 
-  try {
-    await getOrCreateAdminUser(
-      decodedToken.uid,
-      decodedToken.email,
-      decodedToken.name,
-      decodedToken.picture
-    );
-  } catch (error: any) {
-    if (error?.message?.startsWith('ACCESS_DENIED:')) {
-      return res.status(403).json({
-        error: 'Access denied: Only the single authorized TreeWalley administrator can sign in.',
+  return runWithDbAuth({ uid: decodedToken.uid, idToken: token }, async () => {
+    try {
+      await getOrCreateAdminUser(
+        decodedToken.uid,
+        decodedToken.email!,
+        decodedToken.name,
+        decodedToken.picture
+      );
+    } catch (error: any) {
+      if (error?.message?.startsWith('ACCESS_DENIED:')) {
+        return res.status(403).json({
+          error: 'Access denied: Only the single authorized TreeWalley administrator can sign in.',
+        });
+      }
+      console.error('Administrator database verification failed:', error?.message || error);
+      return res.status(503).json({
+        error: 'Administrator workspace storage is temporarily unavailable. Please try again shortly.',
+        code: 'DATABASE_UNAVAILABLE',
       });
     }
-    console.error('Administrator database verification failed:', error?.message || error);
-    return res.status(503).json({
-      error: 'Administrator workspace storage is temporarily unavailable. Please try again shortly.',
-      code: 'DATABASE_UNAVAILABLE',
-    });
-  }
 
-  req.user = decodedToken;
-  req.adminEmail = decodedToken.email.toLowerCase();
-  next();
+    req.user = decodedToken;
+    req.adminEmail = decodedToken.email!.toLowerCase();
+    next();
+  });
 };

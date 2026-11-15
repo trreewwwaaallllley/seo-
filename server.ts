@@ -35,6 +35,7 @@ import {
   generateInspirationImage,
   generateSeoArticle,
   generateTrendTopics,
+  parseGeminiApiError,
 } from './src/server/gemini.ts';
 import {
   createOrUpdateBloggerPost,
@@ -52,6 +53,7 @@ import {
   submitGscSitemap,
 } from './src/server/googleApis.ts';
 import {
+  ACTIVE_OAUTH_CLIENT_ID,
   BLOGGER_SCOPE,
   buildCloudConfigChecklist,
   defaultDiagnosticsSnapshot,
@@ -63,6 +65,7 @@ import {
   resolveGoogleAccessToken,
   runGoogleDiagnostics,
 } from './src/server/googleDiagnostics.ts';
+import firebaseConfig from './firebase-applet-config.json' with { type: 'json' };
 import {
   mapGoogleApiError,
   sanitizeGoogleDetail,
@@ -348,6 +351,8 @@ async function startServer() {
           geminiConfigured: Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY'),
           googleAdsDeveloperTokenConfigured: Boolean(process.env.GOOGLE_ADS_DEVELOPER_TOKEN),
           googleOAuthClientConfigured: isGoogleOAuthClientConfigured(),
+          activeOAuthClientId: ACTIVE_OAUTH_CLIENT_ID,
+          firebaseProjectId: firebaseConfig.projectId,
           appUrl: getPublicBaseUrl(req),
         },
       });
@@ -442,12 +447,11 @@ async function startServer() {
         return res.json({
           configured: false,
           mode: 'firebase_popup',
+          clientId: ACTIVE_OAUTH_CLIENT_ID,
+          projectId: firebaseConfig.projectId,
           redirectUri,
           requestedScopes,
-          missingSecrets: [
-            ...(!process.env.GOOGLE_CLIENT_ID?.trim() ? ['GOOGLE_CLIENT_ID'] : []),
-            ...(!process.env.GOOGLE_CLIENT_SECRET?.trim() ? ['GOOGLE_CLIENT_SECRET'] : []),
-          ],
+          missingSecrets: [],
         });
       }
 
@@ -474,6 +478,8 @@ async function startServer() {
       res.json({
         configured: true,
         mode: 'oauth_code_offline',
+        clientId: ACTIVE_OAUTH_CLIENT_ID,
+        projectId: firebaseConfig.projectId,
         authUrl: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
         redirectUri,
         requestedScopes,
@@ -590,7 +596,7 @@ async function startServer() {
             lastError: null,
             updatedAt: new Date(),
           })
-          .where(eq(oauthConnections.id, existing[0].id));
+          .where(and(eq(oauthConnections.id, existing[0].id), eq(oauthConnections.userUid, statePayload.uid)));
       } else {
         await db.insert(oauthConnections).values({
           userUid: statePayload.uid,
@@ -686,7 +692,7 @@ async function startServer() {
             lastError: null,
             updatedAt: new Date(),
           })
-          .where(eq(oauthConnections.id, existing[0].id))
+          .where(and(eq(oauthConnections.id, existing[0].id), eq(oauthConnections.userUid, uid)))
           .returning();
       } else {
         [record] = await db
@@ -736,7 +742,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/connections/google/revoke', requireAdminAuth, async (req: AuthRequest, res) => {
+  app.post(['/api/connections/google/revoke', '/api/connections/google/reset'], requireAdminAuth, async (req: AuthRequest, res) => {
     try {
       const uid = req.user!.uid;
       const [conn] = await db
@@ -807,7 +813,7 @@ async function startServer() {
             status: 'Token Expired',
             permissionOk: false,
             lastErrorCode: 'token_expired',
-            lastErrorMessage: 'Temporary access token expired. Click Reconnect or configure GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET for automatic refresh.',
+            lastErrorMessage: 'Temporary access token expired (~1 hour Firebase popup session). Click Reconnect to authorize a fresh token.',
           };
         }
         if (diagnostics.searchConsole.status === 'Connected') {
@@ -816,7 +822,7 @@ async function startServer() {
             status: 'Token Expired',
             permissionOk: false,
             lastErrorCode: 'token_expired',
-            lastErrorMessage: 'Temporary access token expired. Click Reconnect or configure GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET for automatic refresh.',
+            lastErrorMessage: 'Temporary access token expired (~1 hour Firebase popup session). Click Reconnect to authorize a fresh token.',
           };
         }
       }
@@ -1531,7 +1537,181 @@ async function startServer() {
       await logActivity(uid, req.adminEmail!, 'Generated AI SEO Article', 'Blog Writer', `${saved.title} (${langObj.name}, SEO ${saved.seoScore}/100)`);
       res.json({ article: saved, relatedArticleIdeas: generated.relatedArticleIdeas });
     } catch (error: any) {
-      res.status(500).json({ error: error?.message || 'Article generation failed.' });
+      const friendly = parseGeminiApiError(error);
+      res.status(friendly.httpStatus).json({
+        error: friendly.message,
+        errorCode: friendly.errorCode,
+      });
+    }
+  });
+
+  app.post('/api/articles/draft', requireAdminAuth, async (req: AuthRequest, res) => {
+    try {
+      const uid = req.user!.uid;
+      const b = req.body || {};
+      const topic = String(b.topic || '').trim();
+      const primaryKeyword = String(b.primaryKeyword || '').trim();
+      if (!topic || !primaryKeyword) {
+        return res.status(400).json({ error: 'Blog topic and primary keyword are required.' });
+      }
+
+      const langObj = LANGUAGES_350.find((l) => l.code === b.languageCode) || LANGUAGES_350[0];
+      const userLinks = await db.select().from(internalLinks).where(eq(internalLinks.userUid, uid));
+      const userRefs = await db.select().from(externalReferences).where(eq(externalReferences.userUid, uid));
+      const userMedia = await db.select().from(mediaAssets).where(eq(mediaAssets.userUid, uid));
+
+      const selectedMediaIds: number[] = Array.isArray(b.selectedMediaIds) ? b.selectedMediaIds : [];
+      const chosenMedia = selectedMediaIds.length
+        ? userMedia.filter((m) => selectedMediaIds.includes(m.id))
+        : userMedia.slice(0, 1);
+
+      const selectedInternalUrls: string[] = Array.isArray(b.internalLinks) ? b.internalLinks : [];
+      const chosenInternal = selectedInternalUrls.length
+        ? userLinks.filter((l) => selectedInternalUrls.includes(l.url))
+        : userLinks.slice(0, 3);
+      const approvedExternal = userRefs.filter((r) => r.approved).slice(0, 2);
+
+      const secondaryList = Array.isArray(b.secondaryKeywords)
+        ? b.secondaryKeywords
+        : String(b.secondaryKeywords || '')
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
+
+      const slugBase = topic
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 64) || 'treewalley-guide';
+
+      const imagesAttached = chosenMedia.map((m) => ({
+        url: m.webpUrl || m.publicUrl,
+        alt: m.altText,
+        caption: m.caption || '',
+        width: m.width,
+        height: m.height,
+      }));
+
+      const usedInternal = chosenInternal.map((l) => ({
+        url: l.url,
+        anchor: l.title,
+        valid: l.httpStatus ? l.httpStatus >= 200 && l.httpStatus < 400 : true,
+      }));
+      const usedExternal = approvedExternal.map((r) => ({
+        url: r.url,
+        title: r.title,
+        valid: r.httpStatus ? r.httpStatus >= 200 && r.httpStatus < 400 : true,
+      }));
+
+      const figureHtml = imagesAttached
+        .map(
+          (img) =>
+            `<figure>\n  <img src="${img.url}" alt="${img.alt}" />\n  <figcaption>${img.caption || img.alt}</figcaption>\n</figure>`
+        )
+        .join('\n\n');
+
+      const internalLinksHtml = usedInternal.length
+        ? `<ul>\n${usedInternal.map((l) => `  <li><a href="${l.url}">${l.anchor}</a></li>`).join('\n')}\n</ul>`
+        : `<p>Explore handcrafted solid wood furniture at <a href="https://www.treewalley.com/">TreeWalley Furniture</a>.</p>`;
+
+      const externalLinksHtml = usedExternal.length
+        ? `<ul>\n${usedExternal.map((r) => `  <li><a href="${r.url}" target="_blank" rel="noopener noreferrer">${r.title}</a></li>`).join('\n')}\n</ul>`
+        : '';
+
+      const contentHtml = `<p>Choosing the right <strong>${primaryKeyword}</strong> for an Indian home starts with solid timber seasoning, mortise-and-tenon joinery, and thoughtful room proportions.</p>
+
+${figureHtml}
+
+<h2>Why Solid Sheesham Wood Matters for ${b.blogCategory || 'Your Home'}</h2>
+<p>Write your editorial overview covering timber density, natural grain character, and finish durability for ${b.targetAudience || 'Indian homeowners'}.</p>
+
+<h2>Key Dimensions &amp; Craftsmanship Checklist</h2>
+<ul>
+  <li>Verify kiln-seasoned solid wood construction and joinery stability.</li>
+  <li>Compare storage utility, floor clearance, and finish maintenance.</li>
+  <li>Match proportions with your room layout and lighting.</li>
+</ul>
+
+<h2>Explore Verified TreeWalley Collections</h2>
+${internalLinksHtml}
+
+${externalLinksHtml ? `<h2>Material &amp; Industry References</h2>\n${externalLinksHtml}` : ''}
+
+<h2>Frequently Asked Questions</h2>
+<h3>How do I care for a ${primaryKeyword} during monsoon humidity?</h3>
+<p>Keep solid wood away from direct wall dampness, wipe spills promptly with a dry cotton cloth, and maintain balanced indoor ventilation.</p>`;
+
+      const existingArticles = await db
+        .select({
+          id: articles.id,
+          title: articles.title,
+          primaryKeyword: articles.primaryKeyword,
+          contentHtml: articles.contentHtml,
+        })
+        .from(articles)
+        .where(eq(articles.userUid, uid));
+
+      const seoTitle = `${topic}`.slice(0, 60);
+      const metaDescription = `Explore ${primaryKeyword} craftsmanship, sizing, and care guidance from TreeWalley Furniture for Indian homes.`.slice(0, 158);
+
+      const validation = validateArticleSeo({
+        title: topic,
+        seoTitle,
+        metaDescription,
+        primaryKeyword,
+        secondaryKeywords: secondaryList,
+        contentHtml,
+        internalLinks: usedInternal,
+        externalLinks: usedExternal,
+        images: imagesAttached,
+        existingArticles,
+      });
+
+      const [saved] = await db
+        .insert(articles)
+        .values({
+          userUid: uid,
+          title: topic,
+          seoTitle,
+          slug: `${slugBase}-${Date.now().toString(36).slice(-4)}`,
+          metaDescription,
+          primaryKeyword,
+          secondaryKeywordsJson: secondaryList,
+          languageCode: langObj.code,
+          languageName: langObj.name,
+          regionalVariation: b.regionalVariation || langObj.region,
+          targetCountry: b.targetCountry || 'India',
+          mode: b.mode || 'SEO Buying Guide',
+          writingStyle: b.writingStyle || 'Premium editorial',
+          blogCategory: b.blogCategory || 'Wooden beds',
+          targetAudience: b.targetAudience || 'Indian homeowners',
+          wordCountTarget: Number(b.wordCount) || 1200,
+          wordCountActual: validation.wordCountActual,
+          contentHtml,
+          faqJson: [
+            {
+              question: `How do I care for a ${primaryKeyword} during monsoon humidity?`,
+              answer: 'Keep solid wood away from direct dampness, wipe spills promptly, and maintain balanced indoor airflow.',
+            },
+          ],
+          internalLinksJson: usedInternal,
+          externalLinksJson: usedExternal,
+          featuredImageUrl: imagesAttached[0]?.url || null,
+          imagesJson: imagesAttached,
+          labelsJson: [b.blogCategory || 'Solid Wood', langObj.name, 'TreeWalley'],
+          seoScore: validation.score,
+          seoAuditJson: { score: validation.score, checks: validation.checks },
+          cannibalizationWarning: validation.cannibalizationWarning,
+          duplicateScore: validation.duplicateScore,
+          languageReliabilityFlag: langObj.reliability,
+          status: 'draft',
+        })
+        .returning();
+
+      await logActivity(uid, req.adminEmail!, 'Created Structured SEO Draft (Free)', 'Blog Writer', `${saved.title} (SEO ${saved.seoScore}/100)`);
+      res.json({ article: saved });
+    } catch (error: any) {
+      res.status(500).json({ error: error?.message || 'Failed to create structured draft.' });
     }
   });
 
@@ -1790,7 +1970,7 @@ async function startServer() {
         const [row] = await db
           .update(articles)
           .set({ status: nextStatus, scheduledFor, updatedAt: new Date() })
-          .where(eq(articles.id, art.id))
+          .where(and(eq(articles.id, art.id), eq(articles.userUid, uid)))
           .returning();
         updated.push(row);
       }
@@ -1923,10 +2103,10 @@ async function startServer() {
       await logActivity(uid, req.adminEmail!, 'Generated AI Inspiration Image', 'Image Library', filename);
       res.json({ asset });
     } catch (error: any) {
-      res.status(400).json({
-        error:
-          error?.message ||
-          'AI image generation requires a billing-enabled Gemini API key in Settings > Secrets.',
+      const friendly = parseGeminiApiError(error);
+      res.status(friendly.httpStatus).json({
+        error: friendly.message,
+        errorCode: friendly.errorCode,
       });
     }
   });
@@ -1948,7 +2128,7 @@ async function startServer() {
       const [updated] = await db
         .update(mediaAssets)
         .set({ publicVerified: verified })
-        .where(eq(mediaAssets.id, id))
+        .where(and(eq(mediaAssets.id, id), eq(mediaAssets.userUid, req.user!.uid)))
         .returning();
       res.json({ asset: updated, httpStatus: status, fullUrl });
     } catch (error: any) {
@@ -2050,7 +2230,7 @@ async function startServer() {
       const [updated] = await db
         .update(internalLinks)
         .set({ httpStatus: status, lastCheckedAt: new Date() })
-        .where(eq(internalLinks.id, id))
+        .where(and(eq(internalLinks.id, id), eq(internalLinks.userUid, req.user!.uid)))
         .returning();
       res.json({ link: updated });
     } catch (error: any) {
@@ -2104,7 +2284,7 @@ async function startServer() {
       const [updated] = await db
         .update(externalReferences)
         .set({ httpStatus: status, lastCheckedAt: new Date() })
-        .where(eq(externalReferences.id, id))
+        .where(and(eq(externalReferences.id, id), eq(externalReferences.userUid, req.user!.uid)))
         .returning();
       res.json({ reference: updated });
     } catch (error: any) {
@@ -2219,7 +2399,7 @@ async function startServer() {
           scheduledFor: scheduledIso ? new Date(scheduledIso) : article.scheduledFor,
           updatedAt: new Date(),
         })
-        .where(eq(articles.id, article.id))
+        .where(and(eq(articles.id, article.id), eq(articles.userUid, uid)))
         .returning();
 
       const [log] = await db

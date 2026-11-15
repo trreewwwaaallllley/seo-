@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { LogOut, Menu } from 'lucide-react';
-import { auth, signOutAdmin } from './lib/firebase';
+import { auth, signOutAdmin, testFirestoreConnection } from './lib/firebase';
 import { apiFetch } from './lib/api';
 import { AdminProfileResponse, SidebarModuleId } from './types/seo';
 import { LoginScreen } from './components/LoginScreen';
@@ -43,6 +43,11 @@ export default function App() {
       setAuthError(null);
       setServiceUnavailableError(null);
       const data = await apiFetch<AdminProfileResponse>('/api/admin/me');
+      if (!data?.admin?.email) {
+        setProfile(null);
+        setServiceUnavailableError('Administrator profile response was incomplete. Click Retry to reconnect.');
+        return;
+      }
       sessionStorage.removeItem('tw_project_reload');
       setProfile(data);
     } catch (err: any) {
@@ -68,6 +73,7 @@ export default function App() {
     const unsub = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
       if (user) {
+        testFirestoreConnection().catch(() => null);
         await fetchAdminProfile();
       } else {
         setProfile(null);
@@ -134,7 +140,7 @@ export default function App() {
         onSelect={setActiveModule}
         mobileOpen={mobileMenuOpen}
         onCloseMobile={() => setMobileMenuOpen(false)}
-        adminEmail={profile.admin.email}
+        adminEmail={profile.admin?.email || firebaseUser.email || ''}
       />
 
       <div className="flex-1 min-w-0 flex flex-col">

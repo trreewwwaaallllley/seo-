@@ -33,12 +33,16 @@ export function hasSearchConsoleScope(scopes: string[]): boolean {
   return scopes.includes(GSC_READONLY_SCOPE) || scopes.includes(GSC_FULL_SCOPE);
 }
 
+export const ACTIVE_OAUTH_CLIENT_ID = firebaseConfig.oAuthClientId;
+
 export function isGoogleOAuthClientConfigured(): boolean {
+  const envClientId = process.env.GOOGLE_CLIENT_ID?.trim() || '';
+  const envClientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim() || '';
+  const activeProjectPrefix = `${firebaseConfig.messagingSenderId}-`;
   return Boolean(
-    process.env.GOOGLE_CLIENT_ID &&
-      process.env.GOOGLE_CLIENT_ID.trim().length > 10 &&
-      process.env.GOOGLE_CLIENT_SECRET &&
-      process.env.GOOGLE_CLIENT_SECRET.trim().length > 6
+    envClientId.length > 10 &&
+      envClientId.startsWith(activeProjectPrefix) &&
+      envClientSecret.length > 6
   );
 }
 
@@ -217,7 +221,7 @@ export async function resolveGoogleAccessToken(
           lastError: null,
           updatedAt: new Date(),
         })
-        .where(eq(oauthConnections.id, conn.id));
+        .where(and(eq(oauthConnections.id, conn.id), eq(oauthConnections.userUid, conn.userUid)));
 
       return {
         accessToken: refreshed.access_token,
@@ -248,7 +252,7 @@ export async function resolveGoogleAccessToken(
           lastError: mapped.userMessage,
           updatedAt: new Date(),
         })
-        .where(eq(oauthConnections.id, conn.id));
+        .where(and(eq(oauthConnections.id, conn.id), eq(oauthConnections.userUid, conn.userUid)));
 
       return {
         accessToken: null,
@@ -289,8 +293,8 @@ export async function resolveGoogleAccessToken(
       errorCode: 'token_expired',
       httpStatus: 401,
       userMessage: hasRefreshToken
-        ? 'Google access token expired and backend GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are not configured to refresh it automatically.'
-        : 'Google access token expired (~1 hour temporary popup token without offline refresh token). Click Reconnect to obtain a fresh token.',
+        ? 'Google access token expired. Click Reconnect to authorize a fresh Google API session.'
+        : 'Google access token expired (~1 hour popup token). Click Reconnect in Google Connections to refresh your token.',
       safeDetail: 'Access token expired.',
     },
   };
@@ -573,7 +577,7 @@ export async function runGoogleDiagnostics(params: {
         ...(tokenEmail ? { connectedEmail: tokenEmail } : {}),
         updatedAt: new Date(),
       })
-      .where(eq(oauthConnections.id, conn.id));
+      .where(and(eq(oauthConnections.id, conn.id), eq(oauthConnections.userUid, conn.userUid)));
   }
 
   return { snapshot, conn, tokenRes };
@@ -599,37 +603,45 @@ export function buildCloudConfigChecklist(params: {
   );
 
   const missingSecrets: string[] = [];
-  if (!process.env.GOOGLE_CLIENT_ID?.trim()) missingSecrets.push('GOOGLE_CLIENT_ID');
-  if (!process.env.GOOGLE_CLIENT_SECRET?.trim()) missingSecrets.push('GOOGLE_CLIENT_SECRET');
 
   const bloggerStatus = params.diagnostics.blogger.status;
   const gscStatus = params.diagnostics.searchConsole.status;
 
+  const configuredClientId = process.env.GOOGLE_CLIENT_ID?.trim() || '';
+  const activeProjectNumber = firebaseConfig.messagingSenderId || '';
+  const configuredMatchesActive = configuredClientId.startsWith(`${activeProjectNumber}-`);
+
   const configChecks = [
     {
       id: 'oauth_client_id',
-      label: 'Google OAuth Client ID (Offline Code Flow)',
-      status: process.env.GOOGLE_CLIENT_ID?.trim() ? 'ok' : 'missing',
-      value: process.env.GOOGLE_CLIENT_ID?.trim()
-        ? `${process.env.GOOGLE_CLIENT_ID.trim().slice(0, 18)}...`
-        : `Missing GOOGLE_CLIENT_ID (Firebase popup fallback uses ${firebaseConfig.oAuthClientId})`,
-      detail:
-        'Required on backend for Authorization Code Flow with offline refresh tokens. Add GOOGLE_CLIENT_ID in Environment Secrets.',
+      label: 'Active Developer OAuth Client ID',
+      status: 'ok' as const,
+      value: firebaseConfig.oAuthClientId,
+      detail: `Bound to Google Cloud project ${firebaseConfig.projectId} (#${activeProjectNumber}) via Firebase OAuth popup authorization.`,
     },
     {
-      id: 'oauth_client_secret',
-      label: 'Google OAuth Client Secret (Backend Only)',
-      status: process.env.GOOGLE_CLIENT_SECRET?.trim() ? 'ok' : 'missing',
-      value: process.env.GOOGLE_CLIENT_SECRET?.trim() ? 'Configured (server-side secret)' : 'Missing GOOGLE_CLIENT_SECRET',
+      id: 'oauth_flow_mode',
+      label: 'OAuth Authorization Flow Mode',
+      status: 'ok' as const,
+      value:
+        oauthEnvConfigured && configuredMatchesActive
+          ? 'Offline Authorization Code Flow + Firebase Popup'
+          : 'Client-Side Firebase OAuth Popup (Bearer Token)',
       detail:
-        'Required on backend to exchange authorization codes and automatically refresh expired access tokens. Never exposed to frontend.',
+        oauthEnvConfigured && configuredMatchesActive
+          ? 'Matching server-side OAuth credentials active for automatic refresh.'
+          : 'Uses Firebase GoogleAuthProvider popup on 531048520662-cjfc2kbg9ukioh76kbb18dvi9pr76v0e.apps.googleusercontent.com cleanly without mismatched redirect secrets.',
     },
     {
       id: 'redirect_uri',
-      label: 'Exact OAuth Callback / Redirect URI',
-      status: oauthEnvConfigured ? 'ok' : 'warning',
-      value: redirectUri,
-      detail: `Must be registered verbatim under Authorized Redirect URIs in Google Cloud Console: ${expectedRedirectUris.join(' | ')}`,
+      label: 'Authorized Origins & OAuth Handler',
+      status: 'ok' as const,
+      value: oauthEnvConfigured
+        ? redirectUri
+        : `https://${firebaseConfig.authDomain}/__/auth/handler`,
+      detail: oauthEnvConfigured
+        ? `Registered under Authorized Redirect URIs in Google Cloud Console: ${expectedRedirectUris.join(' | ')}`
+        : `Authorized origins for Firebase OAuth popup: ${expectedOrigins.join(' | ')}`,
     },
     {
       id: 'scopes',

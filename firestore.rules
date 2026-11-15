@@ -1,0 +1,190 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedAdmin() {
+      return isSignedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email is string
+        && request.auth.token.email.lower() == 'mrramsain03@gmail.com';
+    }
+
+    function isValidAdminOwnedDoc(data) {
+      return data.userUid is string
+        && data.userUid.size() <= 128
+        && data.userUid == request.auth.uid;
+    }
+
+    function isValidUserDoc(data) {
+      return data.uid is string
+        && data.uid.size() <= 128
+        && data.uid == request.auth.uid
+        && data.email is string
+        && data.email.size() <= 320
+        && data.role == 'admin';
+    }
+
+    // Boot connectivity check doc (read-only)
+    match /test/{docId} {
+      allow get: if isValidId(docId) && docId == 'connection' && isSignedIn();
+      allow list, write: if false;
+    }
+
+    // Single authorized administrator user document
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isVerifiedAdmin() && userId == request.auth.uid
+        && (resource == null || resource.data.uid == request.auth.uid);
+      allow list: if isVerifiedAdmin() && resource.data.uid == request.auth.uid;
+      allow create: if isValidId(userId) && isVerifiedAdmin() && userId == request.auth.uid
+        && isValidUserDoc(request.resource.data);
+      allow update: if isValidId(userId) && isVerifiedAdmin() && userId == request.auth.uid
+        && resource.data.uid == request.auth.uid
+        && isValidUserDoc(request.resource.data)
+        && request.resource.data.uid == resource.data.uid;
+      allow delete: if isValidId(userId) && isVerifiedAdmin() && resource.data.uid == request.auth.uid;
+    }
+
+    // Published articles may be read publicly via /public/article/:slug; drafts & writes are strictly admin-only
+    match /articles/{articleId} {
+      allow get: if isValidId(articleId) && (
+        (isVerifiedAdmin() && (resource == null || resource.data.userUid == request.auth.uid)) ||
+        (resource != null && resource.data.status == 'published')
+      );
+      allow list: if (isVerifiedAdmin() && resource.data.userUid == request.auth.uid) ||
+        resource.data.status == 'published';
+      allow create: if isValidId(articleId) && isVerifiedAdmin() && isValidAdminOwnedDoc(request.resource.data);
+      allow update: if isValidId(articleId) && isVerifiedAdmin()
+        && resource.data.userUid == request.auth.uid
+        && isValidAdminOwnedDoc(request.resource.data);
+      allow delete: if isValidId(articleId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+    }
+
+    match /admin_settings/{docId} {
+      allow get: if isValidId(docId) && isVerifiedAdmin() && docId == request.auth.uid
+        && (resource == null || resource.data.userUid == request.auth.uid);
+      allow list: if isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+      allow create: if isValidId(docId) && isVerifiedAdmin() && docId == request.auth.uid
+        && isValidAdminOwnedDoc(request.resource.data);
+      allow update: if isValidId(docId) && isVerifiedAdmin() && docId == request.auth.uid
+        && resource.data.userUid == request.auth.uid
+        && isValidAdminOwnedDoc(request.resource.data);
+      allow delete: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+    }
+
+    match /oauth_connections/{docId} {
+      allow get: if isValidId(docId) && isVerifiedAdmin() && (resource == null || resource.data.userUid == request.auth.uid);
+      allow list: if isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+      allow create: if isValidId(docId) && isVerifiedAdmin() && isValidAdminOwnedDoc(request.resource.data);
+      allow update: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid && isValidAdminOwnedDoc(request.resource.data);
+      allow delete: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+    }
+
+    match /keywords/{docId} {
+      allow get: if isValidId(docId) && isVerifiedAdmin() && (resource == null || resource.data.userUid == request.auth.uid);
+      allow list: if isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+      allow create: if isValidId(docId) && isVerifiedAdmin() && isValidAdminOwnedDoc(request.resource.data);
+      allow update: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid && isValidAdminOwnedDoc(request.resource.data);
+      allow delete: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+    }
+
+    match /trend_snapshots/{docId} {
+      allow get: if isValidId(docId) && isVerifiedAdmin() && (resource == null || resource.data.userUid == request.auth.uid);
+      allow list: if isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+      allow create: if isValidId(docId) && isVerifiedAdmin() && isValidAdminOwnedDoc(request.resource.data);
+      allow update: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid && isValidAdminOwnedDoc(request.resource.data);
+      allow delete: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+    }
+
+    match /gsc_snapshots/{docId} {
+      allow get: if isValidId(docId) && isVerifiedAdmin() && (resource == null || resource.data.userUid == request.auth.uid);
+      allow list: if isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+      allow create: if isValidId(docId) && isVerifiedAdmin() && isValidAdminOwnedDoc(request.resource.data);
+      allow update: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid && isValidAdminOwnedDoc(request.resource.data);
+      allow delete: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+    }
+
+    match /rank_history/{docId} {
+      allow get: if isValidId(docId) && isVerifiedAdmin() && (resource == null || resource.data.userUid == request.auth.uid);
+      allow list: if isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+      allow create: if isValidId(docId) && isVerifiedAdmin() && isValidAdminOwnedDoc(request.resource.data);
+      allow update: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid && isValidAdminOwnedDoc(request.resource.data);
+      allow delete: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+    }
+
+    match /index_inspections/{docId} {
+      allow get: if isValidId(docId) && isVerifiedAdmin() && (resource == null || resource.data.userUid == request.auth.uid);
+      allow list: if isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+      allow create: if isValidId(docId) && isVerifiedAdmin() && isValidAdminOwnedDoc(request.resource.data);
+      allow update: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid && isValidAdminOwnedDoc(request.resource.data);
+      allow delete: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+    }
+
+    match /internal_links/{docId} {
+      allow get: if isValidId(docId) && isVerifiedAdmin() && (resource == null || resource.data.userUid == request.auth.uid);
+      allow list: if isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+      allow create: if isValidId(docId) && isVerifiedAdmin() && isValidAdminOwnedDoc(request.resource.data);
+      allow update: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid && isValidAdminOwnedDoc(request.resource.data);
+      allow delete: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+    }
+
+    match /external_references/{docId} {
+      allow get: if isValidId(docId) && isVerifiedAdmin() && (resource == null || resource.data.userUid == request.auth.uid);
+      allow list: if isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+      allow create: if isValidId(docId) && isVerifiedAdmin() && isValidAdminOwnedDoc(request.resource.data);
+      allow update: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid && isValidAdminOwnedDoc(request.resource.data);
+      allow delete: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+    }
+
+    match /media_assets/{docId} {
+      allow get: if isValidId(docId) && isVerifiedAdmin() && (resource == null || resource.data.userUid == request.auth.uid);
+      allow list: if isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+      allow create: if isValidId(docId) && isVerifiedAdmin() && isValidAdminOwnedDoc(request.resource.data);
+      allow update: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid && isValidAdminOwnedDoc(request.resource.data);
+      allow delete: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+    }
+
+    match /bulk_jobs/{docId} {
+      allow get: if isValidId(docId) && isVerifiedAdmin() && (resource == null || resource.data.userUid == request.auth.uid);
+      allow list: if isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+      allow create: if isValidId(docId) && isVerifiedAdmin() && isValidAdminOwnedDoc(request.resource.data);
+      allow update: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid && isValidAdminOwnedDoc(request.resource.data);
+      allow delete: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+    }
+
+    match /publishing_logs/{docId} {
+      allow get: if isValidId(docId) && isVerifiedAdmin() && (resource == null || resource.data.userUid == request.auth.uid);
+      allow list: if isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+      allow create: if isValidId(docId) && isVerifiedAdmin() && isValidAdminOwnedDoc(request.resource.data);
+      allow update: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid && isValidAdminOwnedDoc(request.resource.data);
+      allow delete: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+    }
+
+    match /audit_reports/{docId} {
+      allow get: if isValidId(docId) && isVerifiedAdmin() && (resource == null || resource.data.userUid == request.auth.uid);
+      allow list: if isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+      allow create: if isValidId(docId) && isVerifiedAdmin() && isValidAdminOwnedDoc(request.resource.data);
+      allow update: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid && isValidAdminOwnedDoc(request.resource.data);
+      allow delete: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+    }
+
+    match /activity_logs/{docId} {
+      allow get: if isValidId(docId) && isVerifiedAdmin() && (resource == null || resource.data.userUid == request.auth.uid);
+      allow list: if isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+      allow create: if isValidId(docId) && isVerifiedAdmin() && isValidAdminOwnedDoc(request.resource.data);
+      allow update: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid && isValidAdminOwnedDoc(request.resource.data);
+      allow delete: if isValidId(docId) && isVerifiedAdmin() && resource.data.userUid == request.auth.uid;
+    }
+  }
+}

@@ -9,31 +9,40 @@ export async function apiFetch<T = any>(
     throw new Error('Administrator session required. Please sign in.');
   }
 
-  const idToken = await user.getIdToken();
-  const googleToken = getInMemoryGoogleToken();
+  const execute = async (forceRefresh: boolean) => {
+    const idToken = await user.getIdToken(forceRefresh);
+    const googleToken = getInMemoryGoogleToken();
 
-  const headers = new Headers(options.headers || {});
-  headers.set('Authorization', `Bearer ${idToken}`);
-  if (googleToken) {
-    headers.set('x-google-access-token', googleToken);
-  }
-  if (!(options.body instanceof FormData) && !headers.has('Content-Type')) {
-    headers.set('Content-Type', 'application/json');
-  }
+    const headers = new Headers(options.headers || {});
+    headers.set('Authorization', `Bearer ${idToken}`);
+    if (googleToken) {
+      headers.set('x-google-access-token', googleToken);
+    }
+    if (!(options.body instanceof FormData) && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
 
-  const response = await fetch(path, {
-    ...options,
-    headers,
-  });
+    const response = await fetch(path, {
+      ...options,
+      headers,
+    });
 
-  const contentType = response.headers.get('content-type') || '';
-  let data: any;
-  if (contentType.includes('application/json')) {
-    data = await response.json();
-  } else {
-    const rawText = await response.text();
-    const cleanText = rawText.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    data = { error: cleanText || `Request failed (${response.status})` };
+    const contentType = response.headers.get('content-type') || '';
+    let data: any;
+    if (contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const rawText = await response.text();
+      const cleanText = rawText.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      data = { error: cleanText || `Request failed (${response.status})` };
+    }
+
+    return { response, data };
+  };
+
+  let { response, data } = await execute(false);
+  if (response.status === 401 && data?.code !== 'PROJECT_MISMATCH') {
+    ({ response, data } = await execute(true));
   }
 
   if (!response.ok) {

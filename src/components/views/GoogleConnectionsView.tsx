@@ -10,7 +10,13 @@ import {
   Wrench,
   XCircle,
 } from 'lucide-react';
-import { authorizeGoogleApisViaPopup, GOOGLE_SERVICE_SCOPES } from '../../lib/firebase';
+import {
+  ACTIVE_OAUTH_CLIENT_ID,
+  ACTIVE_PROJECT_ID,
+  authorizeGoogleApisViaPopup,
+  clearInMemoryGoogleToken,
+  GOOGLE_SERVICE_SCOPES,
+} from '../../lib/firebase';
 import { apiFetch } from '../../lib/api';
 import {
   AdminProfileResponse,
@@ -213,8 +219,9 @@ export const GoogleConnectionsView: React.FC<GoogleConnectionsViewProps> = ({
     setMessage(null);
     try {
       await apiFetch('/api/connections/google/revoke', { method: 'POST' });
+      clearInMemoryGoogleToken();
       await Promise.all([onRefreshProfile(), loadDiagnostics()]);
-      setMessage('Google OAuth tokens revoked and wiped from encrypted Cloud SQL storage.');
+      setMessage('Google OAuth tokens revoked and reset in encrypted Firestore storage.');
     } catch (err: any) {
       setError(err?.message || 'Revocation failed.');
     } finally {
@@ -611,15 +618,16 @@ export const GoogleConnectionsView: React.FC<GoogleConnectionsViewProps> = ({
 
           {diagData && (
             <>
-              {!diagData.oauthEnvConfigured && (
-                <div className="p-3 rounded-md border border-[#D97706]/40 bg-[#FFFBEB] text-[11px] text-[#92400E] leading-relaxed">
-                  <strong>Missing Offline OAuth Secrets:</strong> Add{' '}
-                  <span className="font-mono-tabular font-semibold">
-                    {diagData.missingSecrets.join(', ')}
-                  </span>{' '}
-                  in Environment Secrets to enable server-side Authorization Code Flow with automatic refresh tokens. Until added, authorization uses temporary ~1h Firebase popup tokens.
+              <div className="p-3 rounded-md border border-[#1B4332]/25 bg-[#F0FDF4] text-[11px] text-[#143325] leading-relaxed">
+                <div>
+                  <strong>Active Google Cloud Project:</strong>{' '}
+                  <span className="font-mono-tabular">{ACTIVE_PROJECT_ID}</span>
                 </div>
-              )}
+                <div className="mt-1 break-all">
+                  <strong>Developer OAuth Client ID:</strong>{' '}
+                  <span className="font-mono-tabular">{ACTIVE_OAUTH_CLIENT_ID}</span>
+                </div>
+              </div>
 
               <div className="space-y-2.5 text-xs">
                 {diagData.configChecks.map((chk) => (

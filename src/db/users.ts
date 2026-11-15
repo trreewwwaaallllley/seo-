@@ -29,64 +29,41 @@ export async function getOrCreateAdminUser(
 ) {
   try {
     const normalizedEmail = email.toLowerCase();
-    const existingSettings = await db.select().from(adminSettings).limit(1);
+    if (normalizedEmail !== DEFAULT_ALLOWLIST_EMAIL) {
+      throw new Error(`ACCESS_DENIED: ${email} is not on the single-administrator allowlist.`);
+    }
+
+    const existingSettings = await db
+      .select()
+      .from(adminSettings)
+      .where(eq(adminSettings.userUid, uid))
+      .limit(1);
     const allowlist = (existingSettings[0]?.allowlistedEmail || DEFAULT_ALLOWLIST_EMAIL).toLowerCase();
 
     if (normalizedEmail !== allowlist) {
       throw new Error(`ACCESS_DENIED: ${email} is not on the single-administrator allowlist.`);
     }
 
-    // Check if the same single-admin email exists under a previous Firebase project UID
-    const [existingByEmail] = await db
-      .select()
-      .from(users)
-      .where(eq(users.email, normalizedEmail))
-      .limit(1);
-
-    const user = await db.transaction(async (tx) => {
-      const upserted = await tx
-        .insert(users)
-        .values({
-          uid,
+    const [user] = await db
+      .insert(users)
+      .values({
+        uid,
+        email: normalizedEmail,
+        displayName: displayName || 'TreeWalley Admin',
+        photoUrl: photoUrl || null,
+        role: 'admin',
+        lastLoginAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: users.uid,
+        set: {
           email: normalizedEmail,
           displayName: displayName || 'TreeWalley Admin',
           photoUrl: photoUrl || null,
-          role: 'admin',
           lastLoginAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: users.uid,
-          set: {
-            email: normalizedEmail,
-            displayName: displayName || 'TreeWalley Admin',
-            photoUrl: photoUrl || null,
-            lastLoginAt: new Date(),
-          },
-        })
-        .returning();
-
-      if (existingByEmail && existingByEmail.uid !== uid) {
-        const oldUid = existingByEmail.uid;
-        await tx.update(adminSettings).set({ userUid: uid }).where(eq(adminSettings.userUid, oldUid));
-        await tx.update(oauthConnections).set({ userUid: uid }).where(eq(oauthConnections.userUid, oldUid));
-        await tx.update(keywords).set({ userUid: uid }).where(eq(keywords.userUid, oldUid));
-        await tx.update(trendSnapshots).set({ userUid: uid }).where(eq(trendSnapshots.userUid, oldUid));
-        await tx.update(gscSnapshots).set({ userUid: uid }).where(eq(gscSnapshots.userUid, oldUid));
-        await tx.update(rankHistory).set({ userUid: uid }).where(eq(rankHistory.userUid, oldUid));
-        await tx.update(indexInspections).set({ userUid: uid }).where(eq(indexInspections.userUid, oldUid));
-        await tx.update(internalLinks).set({ userUid: uid }).where(eq(internalLinks.userUid, oldUid));
-        await tx.update(externalReferences).set({ userUid: uid }).where(eq(externalReferences.userUid, oldUid));
-        await tx.update(mediaAssets).set({ userUid: uid }).where(eq(mediaAssets.userUid, oldUid));
-        await tx.update(articles).set({ userUid: uid }).where(eq(articles.userUid, oldUid));
-        await tx.update(bulkJobs).set({ userUid: uid }).where(eq(bulkJobs.userUid, oldUid));
-        await tx.update(publishingLogs).set({ userUid: uid }).where(eq(publishingLogs.userUid, oldUid));
-        await tx.update(auditReports).set({ userUid: uid }).where(eq(auditReports.userUid, oldUid));
-        await tx.update(activityLogs).set({ userUid: uid }).where(eq(activityLogs.userUid, oldUid));
-        await tx.delete(users).where(eq(users.uid, oldUid));
-      }
-
-      return upserted[0];
-    });
+        },
+      })
+      .returning();
 
     await db
       .insert(adminSettings)

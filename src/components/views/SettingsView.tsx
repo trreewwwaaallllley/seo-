@@ -41,7 +41,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profile, onRefreshPr
         body: JSON.stringify(form),
       });
       await onRefreshProfile();
-      setStatus('Administrator settings saved to PostgreSQL.');
+      setStatus('Administrator settings saved to Firestore.');
     } catch (err: any) {
       setError(err.message);
     } finally {
