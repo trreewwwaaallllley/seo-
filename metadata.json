@@ -1,0 +1,8 @@
+{
+  "name": "TreeWalley SEO Command Center",
+  "description": "Private single-administrator Google SEO intelligence, multilingual AI blog studio, image management, Blogger automation, Search Console rank tracking, and monthly SEO auditing platform for TreeWalley Furniture.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

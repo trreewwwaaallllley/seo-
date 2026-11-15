@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-display: 'Cormorant Garamond', Georgia, serif;
+    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: #FAF8F4;
+    color: #1D221F;
+  }
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono-tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Editorial preview typography for generated furniture articles */
+.editorial-prose h2 {
+  font-family: var(--font-display);
+  font-size: 1.65rem;
+  font-weight: 700;
+  color: #1B4332;
+  margin-top: 1.75rem;
+  margin-bottom: 0.75rem;
+  line-height: 1.25;
+}
+
+.editorial-prose h3 {
+  font-family: var(--font-sans);
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #1D221F;
+  margin-top: 1.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.editorial-prose p {
+  font-size: 0.965rem;
+  line-height: 1.72;
+  color: #2B332E;
+  margin-bottom: 1rem;
+}
+
+.editorial-prose ul,
+.editorial-prose ol {
+  margin-left: 1.25rem;
+  margin-bottom: 1rem;
+  list-style: disc;
+  color: #2B332E;
+}
+
+.editorial-prose li {
+  margin-bottom: 0.4rem;
+  line-height: 1.6;
+}
+
+.editorial-prose a {
+  color: #1B4332;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-weight: 500;
+}
+
+.editorial-prose figure {
+  margin: 1.5rem 0;
+  border: 1px solid #E6E0D6;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: #FFFFFF;
+}
+
+.editorial-prose figure img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.editorial-prose figcaption {
+  padding: 0.65rem 0.9rem;
+  font-size: 0.8rem;
+  color: #5C635E;
+  border-top: 1px solid #E6E0D6;
+}
